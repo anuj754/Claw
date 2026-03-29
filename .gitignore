@@ -1,0 +1,68 @@
+# Build artifacts
+build/
+build_local/
+*.o
+*.d
+*.rpm
+*.so
+*.so.*
+
+# Protobuf / gRPC generated code
+*.pb.cc
+*.pb.h
+*.grpc.pb.cc
+*.grpc.pb.h
+crun-stage/
+third_party/crun/crun-*/
+third_party/crun/build_crun.sh
+
+# CMake build artifacts (local cmake, not gbs)
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+debugfiles.list
+debuglinks.list
+debugsourcefiles.list
+debugsources.list
+documentation.list
+elfbins.list
+*.manifest
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+
+# Gemini agent
+.gemini/
+data/devel/
+dlog_dump.txt
+
+# Plans (local only)
+plan/
+
+# RAG generated data (only data/rag/*.zip is committed)
+/rag/
+src/tizenclaw/tizenclaw
+test/unit_tests/tizenclaw-unittests
+tools/cli/aurum-cli/aurum-cli
+src/tizenclaw-cli/tizenclaw-cli
+src/tizenclaw-tool-executor/tizenclaw-tool-executor
+tools/skills_backup/
+cli_res.txt
+journal.txt

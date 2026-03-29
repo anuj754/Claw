@@ -1,0 +1,20 @@
+[Unit]
+Description=TizenClaw Agent System Service (Debug Native)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tizenclaw --debug
+Restart=on-failure
+User=root
+Group=root
+
+# Allow unlimited coredump size for issue analysis
+LimitCORE=infinity
+
+# Capabilities
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_MAC_ADMIN CAP_NET_ADMIN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SYS_CHROOT
+AmbientCapabilities=CAP_SYS_ADMIN CAP_MAC_ADMIN CAP_NET_ADMIN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SYS_CHROOT
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=TizenClaw Code Execution Sandbox
+Requires=tizenclaw-code-sandbox.socket
+After=tizenclaw-code-sandbox.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/tizenclaw/tizenclaw_secure_container.sh start
+ExecStop=/usr/libexec/tizenclaw/tizenclaw_secure_container.sh stop
+Restart=on-failure
+RestartSec=3
+User=root

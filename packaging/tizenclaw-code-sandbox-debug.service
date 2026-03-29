@@ -1,0 +1,11 @@
+[Unit]
+Description=TizenClaw Code Execution Sandbox (Debug Native)
+Requires=tizenclaw-code-sandbox.socket
+After=tizenclaw-code-sandbox.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/libexec/tizenclaw/tizenclaw_code_executor.py
+Restart=on-failure
+RestartSec=3
+User=root

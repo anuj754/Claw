@@ -1,0 +1,28 @@
+{
+  "active_backend": "gemini",
+  "fallback_backends": ["openai", "ollama"],
+  "backends": {
+    "gemini": {
+      "api_key": "",
+      "model": "gemini-2.5-flash"
+    },
+    "openai": {
+      "api_key": "",
+      "model": "gpt-4o",
+      "endpoint": "https://api.openai.com/v1"
+    },
+    "anthropic": {
+      "api_key": "",
+      "model": "claude-sonnet-4-20250514"
+    },
+    "xai": {
+      "api_key": "",
+      "model": "grok-3",
+      "endpoint": "https://api.x.ai/v1"
+    },
+    "ollama": {
+      "model": "llama3",
+      "endpoint": "http://localhost:11434"
+    }
+  }
+}

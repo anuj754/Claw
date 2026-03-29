@@ -1,0 +1,12 @@
+[Unit]
+Description=TizenClaw Tool Executor
+Requires=tizenclaw-tool-executor.socket
+After=tizenclaw-tool-executor.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tizenclaw-tool-executor
+User=root
+Group=root
+Restart=on-failure
+RestartSec=3

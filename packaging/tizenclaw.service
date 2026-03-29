@@ -1,0 +1,19 @@
+[Unit]
+Description=TizenClaw Agent System Service
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/run/tizen-system-env
+EnvironmentFile=-/run/xdg-root-env
+ExecStart=/usr/libexec/tizenclaw/run_standard_container.sh start
+Restart=on-failure
+User=root
+Group=root
+
+# Capability needs for LXC/kUEP bypass, adjust if further restricted
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_MAC_ADMIN CAP_NET_ADMIN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SYS_CHROOT
+AmbientCapabilities=CAP_SYS_ADMIN CAP_MAC_ADMIN CAP_NET_ADMIN CAP_SYS_PTRACE CAP_SETUID CAP_SETGID CAP_SYS_CHROOT
+
+[Install]
+WantedBy=multi-user.target

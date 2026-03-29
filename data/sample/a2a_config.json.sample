@@ -1,0 +1,8 @@
+{
+  "agent_name": "TizenClaw Agent",
+  "agent_description": "TizenClaw AI Agent for Tizen device management",
+  "agent_url": "http://localhost:9090",
+  "bearer_tokens": [
+    "your-secret-token-here"
+  ]
+}
