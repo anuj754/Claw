@@ -1,0 +1,189 @@
+using System;
+using System.IO;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace MyNuiApp
+{
+    public enum AgentState
+    {
+        Unknown,
+        Idle,       // "idle"     — ready / response complete
+        Thinking,   // "thinking" — LLM is processing
+        ToolCall,   // "tool_call"— executing tools
+    }
+
+    public class CanvasEvent
+    {
+        public AgentState State    { get; set; }
+        public string     StateStr { get; set; }
+        public string     Content  { get; set; }
+    }
+
+    /// <summary>
+    /// Connects to /run/tizenclaw/canvas.sock and receives
+    /// agent state broadcasts (server → client, newline-delimited JSON).
+    ///
+    /// On connect the server immediately sends:
+    ///   {"type":"state","state":"idle","content":"TizenClaw Engine Connected"}
+    /// </summary>
+    public class CanvasStateClient : IDisposable
+    {
+        private const string SocketPath = "/run/tizenclaw/canvas.sock";
+
+        public event Action<CanvasEvent> OnStateChanged;
+        public event Action             OnDisconnected;
+
+        private Socket            _socket;
+        private CancellationTokenSource _cts;
+        private Task              _recvTask;
+        private bool              _disposed;
+
+        public bool IsConnected => _socket?.Connected == true;
+
+        public async Task<bool> ConnectAsync()
+        {
+            try
+            {
+                _socket = new Socket(
+                    AddressFamily.Unix,
+                    SocketType.Stream,
+                    ProtocolType.Unspecified);
+
+                var endpoint = new UnixDomainSocketEndPoint(SocketPath);
+                await _socket.ConnectAsync(endpoint);
+
+                _cts = new CancellationTokenSource();
+                // Start background receive loop
+                _recvTask = Task.Run(
+                    () => ReceiveLoopAsync(_cts.Token));
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Tizen.Log.Error("MYAPP",
+                    $"CanvasStateClient connect failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        public void Disconnect()
+        {
+            _cts?.Cancel();
+            try { _socket?.Shutdown(SocketShutdown.Both); } catch { }
+            try { _socket?.Close(); } catch { }
+        }
+
+        // -------------------------------------------------------
+        // Background receive loop — reads newline-delimited JSON
+        // -------------------------------------------------------
+        private async Task ReceiveLoopAsync(CancellationToken ct)
+        {
+            var buffer    = new byte[1024];
+            var remainder = new StringBuilder();
+
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    int n = await _socket.ReceiveAsync(
+                        new ArraySegment<byte>(buffer),
+                        SocketFlags.None);
+
+                    if (n <= 0)
+                    {
+                        Tizen.Log.Warn("MYAPP",
+                            "CanvasStateClient: server closed connection");
+                        break;
+                    }
+
+                    remainder.Append(
+                        Encoding.UTF8.GetString(buffer, 0, n));
+
+                    // Process every complete \n-delimited message
+                    string accum = remainder.ToString();
+                    int pos;
+                    while ((pos = accum.IndexOf('\n')) >= 0)
+                    {
+                        string line = accum.Substring(0, pos).Trim();
+                        accum = accum.Substring(pos + 1);
+
+                        if (line.Length > 0)
+                            ProcessMessage(line);
+                    }
+                    remainder.Clear();
+                    remainder.Append(accum);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                Tizen.Log.Error("MYAPP",
+                    $"CanvasStateClient recv error: {ex.Message}");
+            }
+
+            OnDisconnected?.Invoke();
+        }
+
+        private void ProcessMessage(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                // Only handle type == "state"
+                if (!root.TryGetProperty("type", out var typeProp) ||
+                    typeProp.GetString() != "state")
+                    return;
+
+                string stateStr = root
+                    .TryGetProperty("state", out var sp)
+                    ? sp.GetString() : "";
+                string content = root
+                    .TryGetProperty("content", out var cp)
+                    ? cp.GetString() : "";
+
+                var ev = new CanvasEvent
+                {
+                    StateStr = stateStr,
+                    Content  = content,
+                    State    = ParseState(stateStr),
+                };
+
+                Tizen.Log.Info("MYAPP",
+                    $"Canvas state: {stateStr} — {content}");
+
+                OnStateChanged?.Invoke(ev);
+            }
+            catch (JsonException ex)
+            {
+                Tizen.Log.Warn("MYAPP",
+                    $"CanvasStateClient JSON error: {ex.Message}");
+            }
+        }
+
+        private static AgentState ParseState(string s) => s switch
+        {
+            "idle"      => AgentState.Idle,
+            "thinking"  => AgentState.Thinking,
+            "tool_call" => AgentState.ToolCall,
+            _           => AgentState.Unknown,
+        };
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                Disconnect();
+                _socket?.Dispose();
+                _cts?.Dispose();
+                _disposed = true;
+            }
+        }
+    }
+}
