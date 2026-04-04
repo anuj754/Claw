@@ -23,6 +23,14 @@ namespace MyNuiApp
         public string     Content  { get; set; }
     }
 
+    public class ToolResultEvent
+    {
+        public string ToolName  { get; set; }
+        public string SessionId { get; set; }
+        // Raw JSON result serialized as a string for flexible UI rendering
+        public string ResultJson { get; set; }
+    }
+
     /// <summary>
     /// Connects to /run/tizenclaw/canvas.sock and receives
     /// agent state broadcasts (server → client, newline-delimited JSON).
@@ -34,8 +42,9 @@ namespace MyNuiApp
     {
         private const string SocketPath = "/run/tizenclaw/canvas.sock";
 
-        public event Action<CanvasEvent> OnStateChanged;
-        public event Action             OnDisconnected;
+        public event Action<CanvasEvent>      OnStateChanged;
+        public event Action<ToolResultEvent>  OnToolResult;
+        public event Action                   OnDisconnected;
 
         private Socket            _socket;
         private CancellationTokenSource _cts;
@@ -136,29 +145,56 @@ namespace MyNuiApp
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                // Only handle type == "state"
-                if (!root.TryGetProperty("type", out var typeProp) ||
-                    typeProp.GetString() != "state")
+                if (!root.TryGetProperty("type", out var typeProp))
                     return;
 
-                string stateStr = root
-                    .TryGetProperty("state", out var sp)
-                    ? sp.GetString() : "";
-                string content = root
-                    .TryGetProperty("content", out var cp)
-                    ? cp.GetString() : "";
+                string type = typeProp.GetString();
 
-                var ev = new CanvasEvent
+                if (type == "state")
                 {
-                    StateStr = stateStr,
-                    Content  = content,
-                    State    = ParseState(stateStr),
-                };
+                    string stateStr = root
+                        .TryGetProperty("state", out var sp)
+                        ? sp.GetString() : "";
+                    string content = root
+                        .TryGetProperty("content", out var cp)
+                        ? cp.GetString() : "";
 
-                Tizen.Log.Info("MYAPP",
-                    $"Canvas state: {stateStr} — {content}");
+                    var ev = new CanvasEvent
+                    {
+                        StateStr = stateStr,
+                        Content  = content,
+                        State    = ParseState(stateStr),
+                    };
 
-                OnStateChanged?.Invoke(ev);
+                    Tizen.Log.Info("MYAPP",
+                        $"Canvas state: {stateStr} — {content}");
+
+                    OnStateChanged?.Invoke(ev);
+                }
+                else if (type == "tool_result")
+                {
+                    string toolName = root
+                        .TryGetProperty("tool_name", out var tn)
+                        ? tn.GetString() : "";
+                    string sessionId = root
+                        .TryGetProperty("session_id", out var si)
+                        ? si.GetString() : "";
+                    string resultJson = root
+                        .TryGetProperty("result", out var rp)
+                        ? rp.GetRawText() : "{}";
+
+                    var ev = new ToolResultEvent
+                    {
+                        ToolName   = toolName,
+                        SessionId  = sessionId,
+                        ResultJson = resultJson,
+                    };
+
+                    Tizen.Log.Info("MYAPP",
+                        $"Tool result: {toolName} → {resultJson.Substring(0, Math.Min(120, resultJson.Length))}");
+
+                    OnToolResult?.Invoke(ev);
+                }
             }
             catch (JsonException ex)
             {

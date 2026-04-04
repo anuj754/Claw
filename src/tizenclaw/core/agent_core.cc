@@ -1039,6 +1039,12 @@ std::string AgentCore::ProcessPrompt(
             {{"output", result.output}};
       }
 
+      // Broadcast each tool result to the NUI app as it arrives
+      if (canvas_ipc_server_) {
+        canvas_ipc_server_->BroadcastToolResult(
+            result.name, session_id, tool_msg.tool_result);
+      }
+
       tool_msgs.push_back(tool_msg);
       local_history.push_back(tool_msg);
     }

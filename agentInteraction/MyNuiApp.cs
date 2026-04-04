@@ -16,6 +16,7 @@ namespace MyNuiApp
         private CanvasStateClient  _canvas;
 
         private TextLabel  _statusLabel;
+        private TextLabel  _toolResultLabel;
         private TextLabel  _responseLabel;
         private TextField  _inputField;
         private Button     _sendButton;
@@ -58,6 +59,18 @@ namespace MyNuiApp
                 WidthSpecification = LayoutParamPolicies.MatchParent,
             };
             root.Add(_statusLabel);
+
+            // Tool result area — shows the last tool execution output
+            _toolResultLabel = new TextLabel("")
+            {
+                MultiLine           = true,
+                PointSize           = 11,
+                TextColor           = new Color(0.1f, 0.4f, 0.1f, 1),
+                WidthSpecification  = LayoutParamPolicies.MatchParent,
+                HeightSpecification = 80,
+                Visibility          = false,
+            };
+            root.Add(_toolResultLabel);
 
             // Response display
             _responseLabel = new TextLabel("")
@@ -128,6 +141,8 @@ namespace MyNuiApp
                     {
                         case AgentState.Thinking:
                             SetStatus("Thinking...");
+                            // Clear tool result area when a new request starts
+                            SetToolResult("");
                             break;
                         case AgentState.ToolCall:
                             SetStatus(ev.Content); // "Executing N tools..."
@@ -139,6 +154,18 @@ namespace MyNuiApp
                             SetStatus(ev.Content);
                             break;
                     }
+                });
+            };
+            _canvas.OnToolResult += ev =>
+            {
+                _ = MainThread.InvokeOnMainThreadAsync(() =>
+                {
+                    // Show a preview of the tool result (first 200 chars)
+                    string preview = ev.ResultJson.Length > 200
+                        ? ev.ResultJson.Substring(0, 200) + "…"
+                        : ev.ResultJson;
+                    SetToolResult($"[{ev.ToolName}]\n{preview}");
+                    SetStatus($"Tool done: {ev.ToolName}");
                 });
             };
             _canvas.OnDisconnected += () =>
@@ -215,6 +242,13 @@ namespace MyNuiApp
         {
             if (_statusLabel != null)
                 _statusLabel.Text = text;
+        }
+
+        private void SetToolResult(string text)
+        {
+            if (_toolResultLabel == null) return;
+            _toolResultLabel.Text       = text;
+            _toolResultLabel.Visibility = !string.IsNullOrEmpty(text);
         }
 
         protected override void OnTerminate()

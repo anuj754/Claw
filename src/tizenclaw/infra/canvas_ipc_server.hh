@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <json.hpp>
 
 namespace tizenclaw {
 
@@ -32,6 +33,13 @@ class CanvasIpcServer {
 
   // Broadcast agent state to connected Canvas clients
   void BroadcastState(const std::string& state, const std::string& content);
+
+  // Broadcast a tool execution result to connected Canvas clients.
+  // Sends a dedicated "tool_result" event with structured fields so the NUI
+  // application can display each tool's output as it completes.
+  void BroadcastToolResult(const std::string& tool_name,
+                           const std::string& session_id,
+                           const nlohmann::json& result);
 
  private:
   void ServerLoop();
