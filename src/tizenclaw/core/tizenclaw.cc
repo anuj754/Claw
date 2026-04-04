@@ -559,6 +559,13 @@ void TizenClawDaemon::HandleIpcClient(int client_sock) {
           std::string session_id = params.value("session_id", "default");
           std::string prompt = params.value("text", "");
           bool stream_requested = params.value("stream", false);
+          bool is_a2ui = params.value("is_a2ui", false);
+
+          // Switch agent instructions for this session based on the flag.
+          // "a2ui" and "default" are defined in agent_modes.json.
+          if (agent_) {
+            agent_->SetSessionMode(session_id, is_a2ui ? "a2ui" : "default");
+          }
 
           if (prompt.empty()) {
             response_json = {

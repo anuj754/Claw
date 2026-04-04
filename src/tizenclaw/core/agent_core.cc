@@ -232,6 +232,35 @@ bool AgentCore::Initialize() {
     }
   }
 
+  // Load named agent instruction modes (agent_modes.json)
+  {
+    auto guard = boot.Track("AgentModes");
+    static constexpr const char* kModesPath =
+        "/opt/usr/share/tizenclaw/config/agent_modes.json";
+    std::ifstream modes_file(kModesPath);
+    if (modes_file.is_open()) {
+      try {
+        nlohmann::json modes_cfg;
+        modes_file >> modes_cfg;
+        if (modes_cfg.contains("modes") && modes_cfg["modes"].is_object()) {
+          for (auto& el : modes_cfg["modes"].items()) {
+            const std::string& mode_name = el.key();
+            if (el.value().contains("instructions") &&
+                el.value()["instructions"].is_string()) {
+              agent_mode_instructions_[mode_name] =
+                  el.value()["instructions"].get<std::string>();
+              LOG(INFO) << "AgentCore: Loaded mode '" << mode_name << "'";
+            }
+          }
+        }
+      } catch (const std::exception& e) {
+        LOG(WARNING) << "AgentCore: Failed to parse agent_modes.json: " << e.what();
+      }
+    } else {
+      LOG(INFO) << "AgentCore: agent_modes.json not found, mode switching unavailable";
+    }
+  }
+
   // Load tool execution policy
   {
     auto guard = boot.Track("ToolPolicy");
@@ -4113,6 +4142,21 @@ std::vector<LlmToolDecl>
 AgentCore::GetToolDeclarations() const {
   std::lock_guard<std::mutex> lock(tools_mutex_);
   return cached_tools_;
+}
+
+bool AgentCore::SetSessionMode(const std::string& session_id,
+                               const std::string& mode_name) {
+  auto it = agent_mode_instructions_.find(mode_name);
+  if (it == agent_mode_instructions_.end()) {
+    LOG(WARNING) << "AgentCore::SetSessionMode: unknown mode '" << mode_name << "'";
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(session_mutex_);
+  session_prompts_[session_id] = it->second;
+  LOG(INFO) << "AgentCore::SetSessionMode: session '" << session_id
+            << "' switched to mode '" << mode_name << "'";
+  return true;
 }
 
 }  // namespace tizenclaw

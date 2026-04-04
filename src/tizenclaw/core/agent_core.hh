@@ -142,6 +142,12 @@ class AgentCore {
   // Connect to external MCP servers mapped in JSON config
   bool ConnectMcpServers(const std::string& config_path);
 
+  // Switch the system prompt for a session to a named mode defined in
+  // agent_modes.json (e.g. "a2ui" or "default").
+  // Returns false if the mode name is not found in the loaded config.
+  bool SetSessionMode(const std::string& session_id,
+                      const std::string& mode_name);
+
   // Return a JSON representation of connected MCP tools
   nlohmann::json GetMcpToolsJson();
 
@@ -276,6 +282,10 @@ class AgentCore {
   // Per-session system prompt overrides
   // session_id → custom system_prompt
   std::map<std::string, std::string> session_prompts_;
+
+  // Named agent instruction sets loaded from agent_modes.json
+  // mode_name → instructions string
+  std::map<std::string, std::string> agent_mode_instructions_;
 
   static constexpr size_t kMaxHistorySize = 30;
   static constexpr size_t kCompactionThreshold = 15;

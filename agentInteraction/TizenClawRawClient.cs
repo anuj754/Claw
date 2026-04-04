@@ -33,11 +33,12 @@ namespace MyNuiApp
         public async Task<string> SendRequestAsync(
             string sessionId,
             string prompt,
+            bool   isA2UI = false,
             CancellationToken ct = default)
         {
             using var sock = await ConnectAsync(ct);
 
-            await SendFrameAsync(sock, BuildRequest(sessionId, prompt, stream: false), ct);
+            await SendFrameAsync(sock, BuildRequest(sessionId, prompt, isA2UI, stream: false), ct);
 
             string frame = await ReadFrameAsync(sock, ct);
             return ParseResult(frame);
@@ -51,11 +52,12 @@ namespace MyNuiApp
             string sessionId,
             string prompt,
             Action<string, bool> onChunk,
+            bool   isA2UI = false,
             CancellationToken ct = default)
         {
             using var sock = await ConnectAsync(ct);
 
-            await SendFrameAsync(sock, BuildRequest(sessionId, prompt, stream: true), ct);
+            await SendFrameAsync(sock, BuildRequest(sessionId, prompt, isA2UI, stream: true), ct);
 
             while (!ct.IsCancellationRequested)
             {
@@ -175,7 +177,7 @@ namespace MyNuiApp
         // Build JSON-RPC 2.0 request
         // Matches tizenclaw_client.cc:197-206
         // -------------------------------------------------------
-        private string BuildRequest(string sessionId, string prompt, bool stream)
+        private string BuildRequest(string sessionId, string prompt, bool isA2UI, bool stream)
         {
             int id = Interlocked.Increment(ref _nextId);
             return JsonSerializer.Serialize(new
@@ -187,6 +189,7 @@ namespace MyNuiApp
                 {
                     session_id = sessionId,
                     text       = prompt,
+                    is_a2ui    = isA2UI,
                     stream     = stream,
                 }
             });

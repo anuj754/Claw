@@ -20,6 +20,10 @@ namespace MyNuiApp
         private TextLabel  _responseLabel;
         private TextField  _inputField;
         private Button     _sendButton;
+        private Button     _modeToggleButton;
+
+        private bool _isA2UI = false;   // false = "default", true = "a2ui"
+        private const string SessionId = "nui_session";
 
         private CancellationTokenSource _requestCts;
 
@@ -59,6 +63,16 @@ namespace MyNuiApp
                 WidthSpecification = LayoutParamPolicies.MatchParent,
             };
             root.Add(_statusLabel);
+
+            // Agent mode toggle — switches between "default" and "a2ui"
+            _modeToggleButton = new Button
+            {
+                Text      = "Mode: Default",
+                PointSize = 11,
+                WidthSpecification = LayoutParamPolicies.MatchParent,
+            };
+            _modeToggleButton.Clicked += OnModeToggleClicked;
+            root.Add(_modeToggleButton);
 
             // Tool result area — shows the last tool execution output
             _toolResultLabel = new TextLabel("")
@@ -198,8 +212,9 @@ namespace MyNuiApp
             {
                 // Speak directly to \0tizenclaw.sock — no libtizenclaw.so
                 await _agent.SendRequestStreamAsync(
-                    sessionId: "nui_session",
+                    sessionId: SessionId,
                     prompt:    prompt,
+                    isA2UI:    _isA2UI,
                     onChunk: (chunk, isDone) =>
                     {
                         // onChunk fires on background thread
@@ -236,6 +251,16 @@ namespace MyNuiApp
                 _requestCts?.Dispose();
                 _requestCts = null;
             }
+        }
+
+        // -------------------------------------------------------
+        // Agent mode toggle — just flips the flag; applied on next send
+        // -------------------------------------------------------
+        private void OnModeToggleClicked(object sender, EventArgs e)
+        {
+            _isA2UI = !_isA2UI;
+            _modeToggleButton.Text = _isA2UI ? "Mode: A2UI" : "Mode: Default";
+            SetStatus($"Mode set to {(_isA2UI ? "A2UI" : "Default")} — takes effect on next send");
         }
 
         private void SetStatus(string text)
