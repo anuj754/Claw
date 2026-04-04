@@ -2,6 +2,7 @@
 #define MCP_CLIENT_MANAGER_HH
 
 #include "mcp_client.hh"
+#include "mcp_http_client.hh"
 #include "../llm/llm_backend.hh" // For LlmToolDecl
 #include <map>
 #include <string>
@@ -35,16 +36,23 @@ class McpClientManager {
 
  private:
   struct ServerConfig {
+    // stdio transport fields
     std::string command;
     std::vector<std::string> args;
     bool is_sandbox = false;
-    int timeout_ms = 30000;
     int idle_timeout_sec = 0;
+    // HTTP transport fields
+    bool is_http = false;
+    std::string http_url;
+    std::string access_token;
+    // shared fields
+    int timeout_ms = 30000;
     std::vector<LlmToolDecl> cached_tools;
     bool loaded = false;
   };
 
   std::map<std::string, std::shared_ptr<McpClient>> clients_;
+  std::map<std::string, std::shared_ptr<McpHttpClient>> http_clients_;
   std::map<std::string, ServerConfig> configs_;
   std::mutex clients_mutex_;
 

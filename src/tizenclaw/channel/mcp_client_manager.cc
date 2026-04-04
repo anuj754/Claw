@@ -15,6 +15,7 @@
  */
 
 #include "mcp_client_manager.hh"
+#include "mcp_http_client.hh"
 #include "../../common/logging.hh"
 
 #include <fstream>
@@ -84,25 +85,71 @@ bool McpClientManager::LoadConfigAndConnect(const std::string& config_path) {
     std::string server_name = el.key();
     auto srv_config = el.value();
 
+    ServerConfig srv;
+    if (srv_config.contains("timeout_seconds") && srv_config["timeout_seconds"].is_number()) {
+      srv.timeout_ms = srv_config["timeout_seconds"].get<int>() * 1000;
+    }
+
+    // --- HTTP transport ---
+    bool is_http = srv_config.contains("type") &&
+                   srv_config["type"].is_string() &&
+                   srv_config["type"].get<std::string>() == "http";
+
+    if (is_http) {
+      if (!srv_config.contains("url") || !srv_config["url"].is_string()) {
+        LOG(WARNING) << "MCP Client Manager: Missing 'url' for HTTP server " << server_name;
+        continue;
+      }
+
+      srv.is_http = true;
+      srv.http_url = srv_config["url"].get<std::string>();
+
+      // Accept both "AccessToken" and "access_token" key spellings.
+      if (srv_config.contains("AccessToken") && srv_config["AccessToken"].is_string()) {
+        srv.access_token = srv_config["AccessToken"].get<std::string>();
+      } else if (srv_config.contains("access_token") && srv_config["access_token"].is_string()) {
+        srv.access_token = srv_config["access_token"].get<std::string>();
+      }
+
+      auto http_client = std::make_shared<McpHttpClient>(
+          server_name, srv.http_url, srv.access_token, srv.timeout_ms);
+
+      if (http_client->Connect()) {
+        auto tools = http_client->GetTools();
+        for (const auto& t : tools) {
+          LlmToolDecl decl;
+          decl.name = "mcp__" + server_name + "__" + t.name;
+          decl.description = "[MCP: " + server_name + "] " + t.description;
+          decl.parameters = t.input_schema;
+          srv.cached_tools.push_back(decl);
+        }
+        srv.loaded = true;
+        http_clients_[server_name] = http_client;
+        LOG(INFO) << "MCP Client Manager: HTTP server connected and tools cached for " << server_name;
+      } else {
+        LOG(WARNING) << "MCP Client Manager: Failed to connect to HTTP server " << server_name;
+      }
+
+      configs_[server_name] = srv;
+      continue;
+    }
+
+    // --- stdio transport ---
     if (!srv_config.contains("command") || !srv_config["command"].is_string()) {
       LOG(WARNING) << "MCP Client Manager: Missing 'command' for " << server_name;
       continue;
     }
 
-    ServerConfig srv;
     srv.command = srv_config["command"].get<std::string>();
-    
+
     if (srv_config.contains("args") && srv_config["args"].is_array()) {
       for (auto& a : srv_config["args"]) {
         srv.args.push_back(a.get<std::string>());
       }
     }
-    
+
     if (srv_config.contains("sandbox") && srv_config["sandbox"].is_boolean()) {
       srv.is_sandbox = srv_config["sandbox"].get<bool>();
-    }
-    if (srv_config.contains("timeout_seconds") && srv_config["timeout_seconds"].is_number()) {
-      srv.timeout_ms = srv_config["timeout_seconds"].get<int>() * 1000;
     }
     if (srv_config.contains("idle_timeout_seconds") && srv_config["idle_timeout_seconds"].is_number()) {
       srv.idle_timeout_sec = srv_config["idle_timeout_seconds"].get<int>();
@@ -136,7 +183,7 @@ bool McpClientManager::LoadConfigAndConnect(const std::string& config_path) {
     } else {
       LOG(WARNING) << "MCP Client Manager: Failed to connect to " << server_name;
     }
-    
+
     configs_[server_name] = srv;
   }
 
@@ -187,11 +234,29 @@ std::string McpClientManager::ExecuteTool(const std::string& full_tool_name,
     return "{\"error\": \"Invalid formatting for MCP tool name\"}";
   }
 
+  {
+    std::lock_guard<std::mutex> lock(clients_mutex_);
+    if (!configs_.count(server_name) || !configs_[server_name].loaded) {
+      return "{\"error\": \"MCP Server " + server_name + " is not configured\"}";
+    }
+
+    // HTTP transport: stateless — just call directly.
+    if (configs_[server_name].is_http) {
+      auto it = http_clients_.find(server_name);
+      if (it == http_clients_.end()) {
+        return "{\"error\": \"MCP HTTP server " + server_name + " client missing\"}";
+      }
+      nlohmann::json result = it->second->CallTool(tool_name, args);
+      return result.dump();
+    }
+  }
+
+  // stdio transport: reconnect if idle.
   std::shared_ptr<McpClient> client;
   {
     std::lock_guard<std::mutex> lock(clients_mutex_);
     auto it = clients_.find(server_name);
-    if (it == clients_.end() || !configs_[server_name].loaded) {
+    if (it == clients_.end()) {
       return "{\"error\": \"MCP Server " + server_name + " is not configured\"}";
     }
     client = it->second;
