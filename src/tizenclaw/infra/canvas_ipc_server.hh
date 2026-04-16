@@ -41,6 +41,15 @@ class CanvasIpcServer {
                            const std::string& session_id,
                            const nlohmann::json& result);
 
+  // Broadcast an A2UI-processed result to connected Canvas clients.
+  // Sends an "a2ui_result" event carrying the structured UI descriptor
+  // produced by A2UIAgent from the raw tool result. The NUI application
+  // uses this to render typed UI components (view, list, chart, text, action)
+  // without needing per-tool rendering logic.
+  void BroadcastA2UIResult(const std::string& tool_name,
+                           const std::string& session_id,
+                           const nlohmann::json& a2ui_json);
+
  private:
   void ServerLoop();
   void RemoveClient(int fd);

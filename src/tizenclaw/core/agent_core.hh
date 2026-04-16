@@ -21,6 +21,7 @@
 #include <json.hpp>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -52,6 +53,7 @@
 #include "workflow_engine.hh"
 #include "../channel/mcp_client_manager.hh"
 #include "../infra/canvas_ipc_server.hh"
+#include "a2ui_agent.hh"
 
 namespace tizenclaw {
 
@@ -163,6 +165,13 @@ class AgentCore {
   // Get cached tool declarations (thread-safe)
   [[nodiscard]] std::vector<LlmToolDecl>
   GetToolDeclarations() const;
+
+  // Single-shot LLM call with a custom system prompt and a user message.
+  // No tools, no conversation history. Used by A2UIAgent to transform
+  // tool results without entering the full agentic loop.
+  // Returns the LLM text response, or "" on failure.
+  [[nodiscard]] std::string DirectLlmChat(const std::string& system_prompt,
+                                          const std::string& user_message);
 
  private:
   // Execute a skill and return its JSON output
@@ -374,6 +383,17 @@ class AgentCore {
 
   // Canvas IPC Server
   std::unique_ptr<CanvasIpcServer> canvas_ipc_server_;
+
+  // A2UI agent — transforms tool results into UI-ready JSON payloads.
+  // Initialized after the LLM backend is ready (in Initialize()).
+  std::unique_ptr<A2UIAgent> a2ui_agent_;
+
+  // Dedicated system prompt used by A2UIAgent (loaded from agent_modes.json).
+  std::string a2ui_system_prompt_;
+
+  // Sessions currently running in a2ui mode (tool results are post-processed
+  // by A2UIAgent before being broadcast to the NUI application).
+  std::set<std::string> a2ui_sessions_;
 
   // Get session-specific system prompt
   // (falls back to global system_prompt_)

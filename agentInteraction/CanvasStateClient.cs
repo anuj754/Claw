@@ -32,6 +32,20 @@ namespace MyNuiApp
     }
 
     /// <summary>
+    /// Carries a structured A2UI descriptor produced by the A2UIAgent from a
+    /// raw tool result. The NUI application renders this directly using the
+    /// <see cref="A2UIResultEvent.A2UIJson"/> payload without any per-tool logic.
+    /// </summary>
+    public class A2UIResultEvent
+    {
+        public string ToolName  { get; set; }
+        public string SessionId { get; set; }
+        // Full a2ui JSON descriptor as a raw string.
+        // Schema: { type, title, data, actions? }
+        public string A2UIJson  { get; set; }
+    }
+
+    /// <summary>
     /// Connects to /run/tizenclaw/canvas.sock and receives
     /// agent state broadcasts (server → client, newline-delimited JSON).
     ///
@@ -44,6 +58,9 @@ namespace MyNuiApp
 
         public event Action<CanvasEvent>      OnStateChanged;
         public event Action<ToolResultEvent>  OnToolResult;
+        // Fired when A2UIAgent has post-processed a tool result into a typed
+        // UI descriptor. Only raised for sessions running in a2ui mode.
+        public event Action<A2UIResultEvent>  OnA2UIResult;
         public event Action                   OnDisconnected;
 
         private Socket            _socket;
@@ -194,6 +211,30 @@ namespace MyNuiApp
                         $"Tool result: {toolName} → {resultJson.Substring(0, Math.Min(120, resultJson.Length))}");
 
                     OnToolResult?.Invoke(ev);
+                }
+                else if (type == "a2ui_result")
+                {
+                    string toolName = root
+                        .TryGetProperty("tool_name", out var atn)
+                        ? atn.GetString() : "";
+                    string sessionId = root
+                        .TryGetProperty("session_id", out var asi)
+                        ? asi.GetString() : "";
+                    string a2uiJson = root
+                        .TryGetProperty("a2ui", out var ajp)
+                        ? ajp.GetRawText() : "{}";
+
+                    var ev = new A2UIResultEvent
+                    {
+                        ToolName  = toolName,
+                        SessionId = sessionId,
+                        A2UIJson  = a2uiJson,
+                    };
+
+                    Tizen.Log.Info("MYAPP",
+                        $"A2UI result: {toolName} → {a2uiJson.Substring(0, Math.Min(120, a2uiJson.Length))}");
+
+                    OnA2UIResult?.Invoke(ev);
                 }
             }
             catch (JsonException ex)

@@ -195,4 +195,40 @@ void CanvasIpcServer::BroadcastToolResult(const std::string& tool_name,
   }
 }
 
+void CanvasIpcServer::BroadcastA2UIResult(const std::string& tool_name,
+                                          const std::string& session_id,
+                                          const nlohmann::json& a2ui_json) {
+  if (!running_.load()) return;
+
+  nlohmann::json root = {
+      {"type", "a2ui_result"},
+      {"tool_name", tool_name},
+      {"session_id", session_id},
+      {"a2ui", a2ui_json}
+  };
+
+  std::string msg = root.dump() + "\n";
+  const char* p = msg.c_str();
+  size_t len = msg.length();
+
+  std::lock_guard<std::mutex> lock(clients_mutex_);
+  std::vector<int> dead_clients;
+
+  for (int fd : client_fds_) {
+    ssize_t sent = send(fd, p, len, MSG_NOSIGNAL);
+    if (sent < 0 && (errno == EPIPE || errno == ECONNRESET)) {
+      dead_clients.push_back(fd);
+    }
+  }
+
+  for (int fd : dead_clients) {
+    close(fd);
+    auto it = std::find(client_fds_.begin(), client_fds_.end(), fd);
+    if (it != client_fds_.end()) {
+      client_fds_.erase(it);
+    }
+    LOGI("Canvas app disconnected: fd %d", fd);
+  }
+}
+
 }  // namespace tizenclaw

@@ -251,6 +251,14 @@ bool AgentCore::Initialize() {
                   el.value()["instructions"].get<std::string>();
               LOG(INFO) << "AgentCore: Loaded mode '" << mode_name << "'";
             }
+            // Load the dedicated a2ui_system_prompt for A2UIAgent.
+            if (mode_name == "a2ui" &&
+                el.value().contains("a2ui_system_prompt") &&
+                el.value()["a2ui_system_prompt"].is_string()) {
+              a2ui_system_prompt_ =
+                  el.value()["a2ui_system_prompt"].get<std::string>();
+              LOG(INFO) << "AgentCore: Loaded a2ui_system_prompt";
+            }
           }
         }
       } catch (const std::exception& e) {
@@ -550,6 +558,27 @@ bool AgentCore::Initialize() {
     } else {
       LOG(INFO) << "Canvas IPC Server ready";
     }
+  }
+
+  // Initialize A2UIAgent (requires LLM backend and a2ui_system_prompt).
+  {
+    auto guard = boot.Track("A2UIAgent");
+    if (a2ui_system_prompt_.empty()) {
+      LOG(WARNING) << "AgentCore: a2ui_system_prompt not set — "
+                   << "A2UIAgent will use a built-in default prompt";
+      a2ui_system_prompt_ =
+          "You are an A2UI JSON transformer. Your task is to convert a raw "
+          "tool execution result into a structured JSON payload for a Tizen "
+          "NUI application. Respond ONLY with valid JSON matching this schema: "
+          "{ \"type\": \"view\"|\"list\"|\"chart\"|\"text\"|\"action\", "
+          "\"title\": \"<string>\", \"data\": { ... }, "
+          "\"actions\": [ { \"label\": \"<string>\", \"tool\": \"<string>\", "
+          "\"args\": { ... } } ] }. "
+          "Choose the type that best represents the data. "
+          "Do not include any text outside the JSON object.";
+    }
+    a2ui_agent_ = std::make_unique<A2UIAgent>(this, a2ui_system_prompt_);
+    LOG(INFO) << "A2UIAgent initialized";
   }
 
   // Initialize memory store
@@ -1068,10 +1097,26 @@ std::string AgentCore::ProcessPrompt(
             {{"output", result.output}};
       }
 
-      // Broadcast each tool result to the NUI app as it arrives
+      // Broadcast each raw tool result to the NUI app as it arrives.
       if (canvas_ipc_server_) {
         canvas_ipc_server_->BroadcastToolResult(
             result.name, session_id, tool_msg.tool_result);
+      }
+
+      // If this session is in a2ui mode, post-process the tool result through
+      // A2UIAgent and broadcast the structured UI descriptor separately.
+      {
+        bool is_a2ui_session = false;
+        {
+          std::lock_guard<std::mutex> lock(session_mutex_);
+          is_a2ui_session = a2ui_sessions_.count(session_id) > 0;
+        }
+        if (is_a2ui_session && a2ui_agent_ && canvas_ipc_server_) {
+          nlohmann::json a2ui_payload =
+              a2ui_agent_->Process(result.name, session_id, tool_msg.tool_result);
+          canvas_ipc_server_->BroadcastA2UIResult(
+              result.name, session_id, a2ui_payload);
+        }
       }
 
       tool_msgs.push_back(tool_msg);
@@ -4154,9 +4199,44 @@ bool AgentCore::SetSessionMode(const std::string& session_id,
 
   std::lock_guard<std::mutex> lock(session_mutex_);
   session_prompts_[session_id] = it->second;
+
+  // Track whether this session should use the A2UI post-processing pipeline.
+  if (mode_name == "a2ui") {
+    a2ui_sessions_.insert(session_id);
+  } else {
+    a2ui_sessions_.erase(session_id);
+  }
+
   LOG(INFO) << "AgentCore::SetSessionMode: session '" << session_id
             << "' switched to mode '" << mode_name << "'";
   return true;
+}
+
+std::string AgentCore::DirectLlmChat(const std::string& system_prompt,
+                                     const std::string& user_message) {
+  std::shared_ptr<LlmBackend> backend;
+  {
+    std::lock_guard<std::mutex> lock(backend_mutex_);
+    backend = backend_;
+  }
+
+  if (!backend) {
+    LOG(ERROR) << "AgentCore::DirectLlmChat: no active LLM backend";
+    return "";
+  }
+
+  LlmMessage user_msg;
+  user_msg.role = "user";
+  user_msg.text = user_message;
+
+  LlmResponse resp = backend->Chat({user_msg}, {}, nullptr, system_prompt);
+  if (!resp.success) {
+    LOG(WARNING) << "AgentCore::DirectLlmChat: LLM call failed: "
+                 << resp.error_message;
+    return "";
+  }
+
+  return resp.text;
 }
 
 }  // namespace tizenclaw
