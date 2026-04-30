@@ -1120,6 +1120,66 @@ void ToolDeclarationBuilder::AppendBuiltinTools(
              {"app_id", "title", "html"})}};
     tools.push_back(t);
   }
+
+  // query_peer_agent
+  {
+    LlmToolDecl t;
+    t.name = "query_peer_agent";
+    t.description =
+        "Send a natural language question to a TizenClaw agent "
+        "running on a different device in the same network and "
+        "get its response. Use this to delegate tasks to "
+        "specialised devices (e.g. ask the oven for temperature, "
+        "ask the TV for current playback state). "
+        "The peer must be visible in the swarm (discovered via "
+        "UDP broadcast). Specify the target device by its "
+        "device_type (e.g. 'tv', 'refrigerator', 'oven') or "
+        "provide a direct base_url (e.g. 'http://192.168.1.20:9090').";
+    t.parameters = {
+        {"type", "object"},
+        {"properties",
+         {{"query",
+           {{"type", "string"},
+            {"description",
+             "The natural language question or task to send "
+             "to the peer agent"}}},
+          {"device_type",
+           {{"type", "string"},
+            {"description",
+             "Device type of the target peer as discovered by "
+             "the swarm (e.g. 'tv', 'refrigerator', 'oven'). "
+             "Either device_type or base_url must be provided."}}},
+          {"base_url",
+           {{"type", "string"},
+            {"description",
+             "Direct HTTP base URL of the peer agent "
+             "(e.g. 'http://192.168.1.20:9090'). "
+             "Takes precedence over device_type if provided."}}},
+          {"bearer_token",
+           {{"type", "string"},
+            {"description",
+             "Optional bearer token for authenticating "
+             "to the peer agent"}}}}},
+        {"required",
+         nlohmann::json::array({"query"})}};
+    tools.push_back(t);
+  }
+
+  // list_peer_agents
+  {
+    LlmToolDecl t;
+    t.name = "list_peer_agents";
+    t.description =
+        "List all TizenClaw agents discovered on the local network "
+        "via the swarm heartbeat protocol. Returns each peer's "
+        "device type, IP address, A2A URL, and capabilities. "
+        "Use this before query_peer_agent to find available devices.";
+    t.parameters = {
+        {"type", "object"},
+        {"properties", nlohmann::json::object()},
+        {"required", nlohmann::json::array()}};
+    tools.push_back(t);
+  }
 }
 
 void ToolDeclarationBuilder::AppendActionTools(

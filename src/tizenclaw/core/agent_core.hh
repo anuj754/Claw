@@ -52,6 +52,7 @@
 #include "tool_dispatcher.hh"
 #include "workflow_engine.hh"
 #include "../channel/mcp_client_manager.hh"
+#include "../channel/a2a_client.hh"
 #include "../infra/canvas_ipc_server.hh"
 #include "a2ui_agent.hh"
 
@@ -224,6 +225,12 @@ class AgentCore {
   bool LaunchBridgeApp(const std::string& app_id);
 
 
+  // Query a peer agent via the A2A protocol.
+  // operation: "query" | "list"
+  [[nodiscard]] std::string ExecutePeerAgentOp(
+      const std::string& operation,
+      const nlohmann::json& args);
+
   // Generate embedding vector via LLM API
   std::vector<float> GenerateEmbedding(const std::string& text);
 
@@ -380,6 +387,9 @@ class AgentCore {
 
   // Manager for connecting to external MCP Servers
   std::unique_ptr<McpClientManager> mcp_client_manager_;
+
+  // HTTP client for querying peer agents via A2A protocol
+  std::unique_ptr<A2AClient> a2a_client_;
 
   // Canvas IPC Server
   std::unique_ptr<CanvasIpcServer> canvas_ipc_server_;

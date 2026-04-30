@@ -19,6 +19,7 @@
 #include <atomic>
 #include <json.hpp>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -35,6 +36,7 @@ struct SwarmPeer {
   std::string device_type;   // "tv", "refrigerator", "oven"
   int64_t last_seen_ms;      // epoch ms for heartbeat tracking
   std::vector<std::string> capabilities;
+  int a2a_port = 9090;       // HTTP port of the peer's A2A/WebDashboard server
 };
 
 // SwarmManager enables Multi-Device Orchestration (Phase 3).
@@ -55,6 +57,16 @@ class SwarmManager {
 
   // Get active peers
   [[nodiscard]] std::vector<SwarmPeer> GetPeers() const;
+
+  // Find the first peer matching device_type (e.g. "tv").
+  // Returns nullptr if no matching peer is alive.
+  [[nodiscard]] std::unique_ptr<SwarmPeer> GetPeerByDeviceType(
+      const std::string& device_type) const;
+
+  // Build the base URL for a peer's A2A/WebDashboard endpoint.
+  // Returns "" if no such peer is found.
+  [[nodiscard]] std::string GetPeerA2AUrl(
+      const std::string& device_type) const;
 
   // Get status as JSON for WebDashboard
   [[nodiscard]] nlohmann::json GetStatusJson() const;

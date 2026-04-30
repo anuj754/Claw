@@ -591,6 +591,10 @@ bool AgentCore::Initialize() {
     LOG(INFO) << "MemoryStore initialized";
   }
 
+  // Initialize A2A client for peer-agent queries
+  a2a_client_ = std::make_unique<A2AClient>();
+  LOG(INFO) << "A2AClient initialized";
+
   // Initialize modular tool dispatcher
   {
     auto guard =
@@ -3640,6 +3644,21 @@ void AgentCore::InitializeToolDispatcher() {
         return GenerateWebApp(args);
       };
 
+  // Peer-agent query tools (A2A cross-device)
+  tool_dispatch_["query_peer_agent"] =
+      [this](const nlohmann::json& args,
+             const std::string&,
+             const std::string&) {
+        return ExecutePeerAgentOp("query", args);
+      };
+
+  tool_dispatch_["list_peer_agents"] =
+      [this](const nlohmann::json&,
+             const std::string&,
+             const std::string&) {
+        return ExecutePeerAgentOp("list", {});
+      };
+
   // Register built-in tools to CapabilityRegistry
   auto& reg = CapabilityRegistry::GetInstance();
   auto register_builtin =
@@ -3728,6 +3747,14 @@ void AgentCore::InitializeToolDispatcher() {
       "generate_web_app",
       "Generate dynamic web app",
       "web_app", SideEffect::kReversible);
+  register_builtin(
+      "query_peer_agent",
+      "Query a peer agent on another device",
+      "multi_device", SideEffect::kNone);
+  register_builtin(
+      "list_peer_agents",
+      "List peer agents discovered on the network",
+      "multi_device", SideEffect::kNone);
 
   LOG(INFO) << "Tool dispatcher initialized ("
             << tool_dispatch_.size()
@@ -3870,6 +3897,71 @@ std::string AgentCore::ExecuteMemoryOp(
   return "{\"error\": \"Unknown memory "
          "operation: " +
          operation + "\"}";
+}
+
+std::string AgentCore::ExecutePeerAgentOp(
+    const std::string& operation,
+    const nlohmann::json& args) {
+  if (!swarm_manager_) {
+    return "{\"error\": \"SwarmManager not available\"}";
+  }
+
+  if (operation == "list") {
+    auto peers = swarm_manager_->GetPeers();
+    nlohmann::json list = nlohmann::json::array();
+    for (const auto& p : peers) {
+      list.push_back({
+          {"device_type", p.device_type},
+          {"ip", p.ip_address},
+          {"a2a_url", "http://" + p.ip_address + ":" + std::to_string(p.a2a_port)},
+          {"capabilities", p.capabilities}});
+    }
+    return nlohmann::json({{"peers", list}, {"count", peers.size()}}).dump();
+  }
+
+  if (operation == "query") {
+    if (!a2a_client_) {
+      return "{\"error\": \"A2AClient not initialized\"}";
+    }
+
+    std::string query = args.value("query", "");
+    if (query.empty()) {
+      return "{\"error\": \"query is required\"}";
+    }
+
+    std::string base_url = args.value("base_url", "");
+    if (base_url.empty()) {
+      std::string device_type = args.value("device_type", "");
+      if (device_type.empty()) {
+        return "{\"error\": \"Either base_url or device_type must be provided\"}";
+      }
+      base_url = swarm_manager_->GetPeerA2AUrl(device_type);
+      if (base_url.empty()) {
+        return nlohmann::json({
+            {"error", "No peer found with device_type: " + device_type},
+            {"hint", "Use list_peer_agents to see available devices"}}).dump();
+      }
+    }
+
+    std::string bearer_token = args.value("bearer_token", "");
+
+    LOG(INFO) << "ExecutePeerAgentOp: querying peer at " << base_url;
+    auto result = a2a_client_->SendTask(base_url, query, bearer_token);
+
+    if (!result.success) {
+      return nlohmann::json({
+          {"error", result.error},
+          {"peer_url", base_url}}).dump();
+    }
+
+    return nlohmann::json({
+        {"status", "ok"},
+        {"peer_url", base_url},
+        {"task_id", result.task_id},
+        {"response", result.response}}).dump();
+  }
+
+  return "{\"error\": \"Unknown peer agent operation: " + operation + "\"}";
 }
 
 std::string AgentCore::GenerateWebApp(

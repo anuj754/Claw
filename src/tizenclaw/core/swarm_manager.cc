@@ -189,6 +189,7 @@ void SwarmManager::HeartbeatLoop() {
     hj["status"] = "active";
     hj["device_type"] = profile.device_type;
     hj["capabilities"] = profile.capabilities;
+    hj["a2a_port"] = 9090;  // advertise this device's A2A/WebDashboard port
 
     BroadcastJson(hj);
 
@@ -300,6 +301,9 @@ void SwarmManager::UpdatePeer(
       it->second.capabilities.push_back(c.get<std::string>());
     }
   }
+  if (peer_info.contains("a2a_port") && peer_info["a2a_port"].is_number()) {
+    it->second.a2a_port = peer_info["a2a_port"].get<int>();
+  }
 
   if (is_new) {
     LOG(INFO) << "SwarmManager: New peer discovered > " 
@@ -323,6 +327,28 @@ void SwarmManager::RemoveStalePeers() {
   }
 }
 
+std::unique_ptr<SwarmPeer> SwarmManager::GetPeerByDeviceType(
+    const std::string& device_type) const {
+  std::lock_guard<std::mutex> lock(peers_mutex_);
+  for (const auto& [ip, peer] : peers_) {
+    if (peer.device_type == device_type) {
+      return std::make_unique<SwarmPeer>(peer);
+    }
+  }
+  return nullptr;
+}
+
+std::string SwarmManager::GetPeerA2AUrl(
+    const std::string& device_type) const {
+  std::lock_guard<std::mutex> lock(peers_mutex_);
+  for (const auto& [ip, peer] : peers_) {
+    if (peer.device_type == device_type) {
+      return "http://" + peer.ip_address + ":" + std::to_string(peer.a2a_port);
+    }
+  }
+  return "";
+}
+
 std::vector<SwarmPeer> SwarmManager::GetPeers() const {
   std::vector<SwarmPeer> result;
   std::lock_guard<std::mutex> lock(peers_mutex_);
@@ -342,6 +368,7 @@ nlohmann::json SwarmManager::GetStatusJson() const {
     pj["ip"] = peer.ip_address;
     pj["device_type"] = peer.device_type;
     pj["capabilities"] = peer.capabilities;
+    pj["a2a_url"] = "http://" + peer.ip_address + ":" + std::to_string(peer.a2a_port);
     j["active_peers"].push_back(std::move(pj));
   }
   return j;
