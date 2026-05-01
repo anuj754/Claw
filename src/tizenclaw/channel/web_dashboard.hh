@@ -89,6 +89,9 @@ class WebDashboard : public Channel {
   void ApiAgentCard(SoupMessage* msg) const;
   void ApiA2A(SoupMessage* msg);
 
+  // Swarm peers endpoint
+  void ApiSwarm(SoupMessage* msg) const;
+
   // Health metrics endpoint
   void ApiMetrics(SoupMessage* msg) const;
 

@@ -153,6 +153,9 @@ class AgentCore {
   // Return a JSON representation of connected MCP tools
   nlohmann::json GetMcpToolsJson();
 
+  // Return swarm peer list as JSON (empty array if SwarmManager not running)
+  nlohmann::json GetSwarmStatusJson() const;
+
   // Execute a tool via Bridge API (for WebApp).
   // Validates against the provided allowed_tools
   // list. Returns JSON result string.

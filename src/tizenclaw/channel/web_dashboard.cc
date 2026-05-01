@@ -225,6 +225,8 @@ void WebDashboard::HandleApi(
     } else {
       ApiConfigGet(msg, name);
     }
+  } else if (path == "/api/swarm") {
+    ApiSwarm(msg);
   } else if (path == "/api/a2a") {
     const_cast<WebDashboard*>(this)->ApiA2A(msg);
   } else if (path == "/api/ota/check") {
@@ -337,6 +339,15 @@ void WebDashboard::ApiStatus(SoupMessage* msg) const {
     }
   }
   std::string body = status.dump();
+  soup_message_set_status(msg, SOUP_STATUS_OK);
+  soup_message_set_response(msg, "application/json", SOUP_MEMORY_COPY,
+                            body.c_str(), static_cast<gsize>(body.size()));
+}
+
+void WebDashboard::ApiSwarm(SoupMessage* msg) const {
+  nlohmann::json result = agent_ ? agent_->GetSwarmStatusJson()
+                                 : nlohmann::json{{"active_peers", nlohmann::json::array()}};
+  std::string body = result.dump();
   soup_message_set_status(msg, SOUP_STATUS_OK);
   soup_message_set_response(msg, "application/json", SOUP_MEMORY_COPY,
                             body.c_str(), static_cast<gsize>(body.size()));

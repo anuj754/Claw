@@ -2885,6 +2885,11 @@ bool AgentCore::ConnectMcpServers(const std::string& config_path) {
   return false;
 }
 
+nlohmann::json AgentCore::GetSwarmStatusJson() const {
+  if (swarm_manager_) return swarm_manager_->GetStatusJson();
+  return {{"active_peers", nlohmann::json::array()}};
+}
+
 nlohmann::json AgentCore::GetMcpToolsJson() {
   nlohmann::json result = nlohmann::json::object();
   result["enabled"] = (mcp_client_manager_ != nullptr);
