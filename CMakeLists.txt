@@ -113,6 +113,8 @@ SET(TARGET_TIZEN_VCONF_CLI
   "tizen-vconf-cli")
 SET(TARGET_TIZEN_SWARM_DELEGATE_CLI
   "tizen-swarm-delegate-cli")
+SET(TARGET_TIZEN_INSTAGRAM_CLI
+  "tizen-instagram-cli")
 
 ## CLI tools — Dependencies (declared once)
 PKG_CHECK_MODULES(CAPI_SYSTEM_DEVICE_DEPS REQUIRED
